@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # === Фронтенд (Next.js / Node.js) ===
 **/node_modules/
 **/.next/
@@ -18,3 +19,12 @@
 # === Системні файли ОС ===
 .DS_Store
 Thumbs.db
+=======
+node_modules/
+.next/
+target/
+.idea/
+.env
+.env.local
+*.log 
+>>>>>>> 82b2eca6e0567ffc568fc0c624c33f1770000ade

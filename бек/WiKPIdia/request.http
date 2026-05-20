@@ -1,0 +1,33 @@
+### 1. СТВОРЕННЯ: Додаємо першу статтю у ВіКПІдію
+POST http://localhost:8081/api/articles
+Content-Type: application/json
+
+{
+  "title": "Історія КПІ",
+  "content": "Київський політехнічний інститут був заснований у 1898 році. Це один з найбільших університетів України.",
+  "isPublished": true
+}
+
+###
+
+### 2. ЧИТАННЯ: Отримуємо список усіх статей
+GET http://localhost:8081/api/articles
+
+
+### 3. МОДЕРАЦІЯ: Пропонуємо зміну до статті "Історія КПІ" (id=1)
+POST http://localhost:8081/api/revisions
+Content-Type: application/json
+
+{
+  "articleId": 1,
+  "authorId": 99,
+  "content": "Київський політехнічний інститут був заснований у 1898 році. Тут навчався Сікорський!"
+}
+
+### 4. АДМІН: Затверджуємо правку з id = 1
+POST http://localhost:8081/api/revisions/1/approve
+
+###
+
+### 5. ПЕРЕВІРКА: Дивимося на головну статтю після затвердження
+GET http://localhost:8081/api/articles
