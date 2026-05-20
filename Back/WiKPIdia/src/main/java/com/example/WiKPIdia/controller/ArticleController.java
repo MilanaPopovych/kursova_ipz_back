@@ -22,7 +22,8 @@ public class ArticleController {
     private final ArticleRepository articleRepository;
     private final UserRepository userRepository;
 
-    public record ArticleRequest(String title, String content, String comment) {}
+    public record ArticleRequest(String title, String content, String comment) {
+    }
 
     // =========================================================================
     // ДОПОМІЖНІ МЕТОДИ (СИСТЕМА БЕЗПЕКИ)
@@ -183,5 +184,4 @@ public class ArticleController {
         slug = slug.replaceAll("-+", "-");
 
         return slug + "-" + (System.currentTimeMillis() % 10000);
-    }
-}
+    } }
