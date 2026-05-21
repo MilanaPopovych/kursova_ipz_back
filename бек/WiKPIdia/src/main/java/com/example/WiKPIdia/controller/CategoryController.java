@@ -2,14 +2,13 @@ package com.example.WiKPIdia.controller;
 
 import com.example.WiKPIdia.entity.Article;
 import com.example.WiKPIdia.entity.Category;
-import com.example.WiKPIdia.entity.User;
 import com.example.WiKPIdia.repository.ArticleRepository;
 import com.example.WiKPIdia.repository.CategoryRepository;
-import com.example.WiKPIdia.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,112 +20,121 @@ import java.util.stream.Collectors;
 public class CategoryController {
 
     private final CategoryRepository categoryRepository;
-    private final UserRepository userRepository;
     private final ArticleRepository articleRepository;
 
-    // Record для прийому даних з фронтенду
-    public record CategoryCreateRequest(String name, String description, List<Long> articleIds) {}
+    // DTO для створення категорії
+    public record CategoryCreateRequest(String name, List<Long> articleIds) {}
 
-    // Отримання всіх категорій (з підтримкою пошуку та сортування)
+    // =========================================================================
+    // 1. СТВОРЕННЯ КАТЕГОРІЇ
+    // =========================================================================
+    @PostMapping
+    public ResponseEntity<?> createCategory(@RequestBody CategoryCreateRequest request) {
+        Category category = new Category();
+        category.setName(request.name());
+
+        if (request.articleIds() != null && !request.articleIds().isEmpty()) {
+            List<Article> articles = articleRepository.findAllById(request.articleIds());
+            if (category.getArticles() != null) {
+                category.getArticles().addAll(articles);
+            } else {
+                category.setArticles(new java.util.HashSet<>(articles));
+            }
+        }
+
+        Category savedCategory = categoryRepository.save(category);
+        return ResponseEntity.ok(savedCategory);
+    }
+
+    // =========================================================================
+    // 2. ОТРИМАННЯ ВСІХ КАТЕГОРІЙ (З ПОШУКОМ ТА СОРТУВАННЯМ)
+    // =========================================================================
     @GetMapping
-    public List<Category> getAllCategories(
+    public ResponseEntity<?> getAllCategories(
             @RequestParam(required = false, defaultValue = "") String query,
             @RequestParam(required = false, defaultValue = "") String sort) {
 
         List<Category> categories = categoryRepository.findAll();
 
-        // Фільтрація за текстом
-        if (query != null && !query.trim().isEmpty()) {
+        if (!query.isEmpty()) {
+            String lowerQuery = query.toLowerCase();
             categories = categories.stream()
-                    .filter(c -> c.getName().toLowerCase().contains(query.toLowerCase()))
+                    .filter(c -> c.getName().toLowerCase().contains(lowerQuery))
                     .collect(Collectors.toList());
         }
 
-        // Сортування за алфавітом
         if ("asc".equalsIgnoreCase(sort)) {
-            categories = categories.stream()
-                    .sorted((c1, c2) -> c1.getName().compareToIgnoreCase(c2.getName()))
-                    .collect(Collectors.toList());
+            categories.sort(Comparator.comparing(Category::getName, String.CASE_INSENSITIVE_ORDER));
         } else if ("desc".equalsIgnoreCase(sort)) {
-            categories = categories.stream()
-                    .sorted((c1, c2) -> c2.getName().compareToIgnoreCase(c1.getName()))
-                    .collect(Collectors.toList());
+            categories.sort(Comparator.comparing(Category::getName, String.CASE_INSENSITIVE_ORDER).reversed());
         }
 
-        return categories;
+        return ResponseEntity.ok(categories);
     }
 
-    // Створення нової категорії (Тільки для Адміна)
-    @PostMapping
-    public ResponseEntity<?> createCategory(@RequestBody CategoryCreateRequest request) {
-
-        String activeUsername = AuthController.currentSessionUser;
-        User currentUser = null;
-        if (activeUsername != null) {
-            currentUser = userRepository.findByUsername(activeUsername).orElse(null);
-        }
-
-        if (currentUser == null || !("Адміністратор".equals(currentUser.getRole()) || "Адмін".equals(currentUser.getRole()))) {
-            return ResponseEntity.status(403).body(Map.of("message", "Тільки адміністратор може створювати категорії."));
-        }
-
-        if (request.name() == null || request.name().trim().isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Назва категорії не може бути порожньою."));
-        }
-
-        Category category = new Category();
-        category.setName(request.name().trim());
-
-        if (request.description() != null) {
-            category.setDescription(request.description().trim());
-        }
-
-        // 1. Зберігаємо категорію, щоб отримати ID
-        Category savedCategory = categoryRepository.save(category);
-
-        // 2. Якщо були обрані статті, дістаємо їх і додаємо їм цю категорію
-        if (request.articleIds() != null && !request.articleIds().isEmpty()) {
-            List<Article> selectedArticles = articleRepository.findAllById(request.articleIds());
-
-            for (Article article : selectedArticles) {
-                article.getCategories().add(savedCategory);
-            }
-            // 3. Зберігаємо статті (запишеться в проміжну таблицю)
-            articleRepository.saveAll(selectedArticles);
-        }
-
-        return ResponseEntity.ok(savedCategory);
+    // =========================================================================
+    // 3. ОТРИМАННЯ ОДНІЄЇ КАТЕГОРІЇ ЗА ID
+    // =========================================================================
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getCategoryById(@PathVariable Long id) {
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Категорію з ID " + id + " не знайдено."));
+        return ResponseEntity.ok(category);
     }
 
-    // Видалення категорії за ID (Тільки для Адміна)
+    // =========================================================================
+    // 4. ДОДАВАННЯ СТАТТІ ДО КАТЕГОРІЇ
+    // =========================================================================
+    @PostMapping("/{categoryId}/articles/{articleId}")
+    public ResponseEntity<?> addArticleToCategory(
+            @PathVariable Long categoryId,
+            @PathVariable Long articleId) {
+
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new RuntimeException("Категорію не знайдено"));
+
+        Article article = articleRepository.findById(articleId)
+                .orElseThrow(() -> new RuntimeException("Статтю не знайдено"));
+
+        // ВИПРАВЛЕНО: додаємо через власника зв'язку (Article)
+        article.getCategories().add(category);
+        articleRepository.save(article);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Статтю '" + article.getTitle() + "' успішно додано до категорії '" + category.getName() + "'"
+        ));
+    }
+
+    // =========================================================================
+    // 5. ВИДАЛЕННЯ СТАТТІ З КАТЕГОРІЇ
+    // =========================================================================
+    @DeleteMapping("/{categoryId}/articles/{articleId}")
+    public ResponseEntity<?> removeArticleFromCategory(
+            @PathVariable Long categoryId,
+            @PathVariable Long articleId) {
+
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new RuntimeException("Категорію не знайдено"));
+
+        Article article = articleRepository.findById(articleId)
+                .orElseThrow(() -> new RuntimeException("Статтю не знайдено"));
+
+        // ВИПРАВЛЕНО: видаляємо через власника зв'язку (Article)
+        article.getCategories().remove(category);
+        articleRepository.save(article);
+
+        return ResponseEntity.ok(Map.of("message", "Статтю успішно вилучено з категорії"));
+    }
+
+    // =========================================================================
+    // 6. ВИДАЛЕННЯ КАТЕГОРІЇ
+    // =========================================================================
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteCategory(@PathVariable Long id) {
-
-        String activeUsername = AuthController.currentSessionUser;
-        User currentUser = null;
-        if (activeUsername != null) {
-            currentUser = userRepository.findByUsername(activeUsername).orElse(null);
-        }
-
-        if (currentUser == null || !("Адміністратор".equals(currentUser.getRole()) || "Адмін".equals(currentUser.getRole()))) {
-            return ResponseEntity.status(403).body(Map.of("message", "Тільки адміністратор може видаляти категорії."));
-        }
-
-        Category category = categoryRepository.findById(id).orElse(null);
-        if (category == null) {
-            return ResponseEntity.status(404).body(Map.of("message", "Категорію не знайдено."));
-        }
-
-        // Очищаємо зв'язки перед видаленням, щоб PostgreSQL не видав помилку
-        if (category.getArticles() != null) {
-            for (Article article : category.getArticles()) {
-                article.getCategories().remove(category);
-            }
-            articleRepository.saveAll(category.getArticles());
-        }
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Категорію не знайдено"));
 
         categoryRepository.delete(category);
-
         return ResponseEntity.ok(Map.of("message", "Категорію успішно видалено."));
     }
 }

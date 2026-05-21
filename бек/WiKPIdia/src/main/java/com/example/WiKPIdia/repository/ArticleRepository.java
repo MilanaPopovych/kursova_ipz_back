@@ -10,12 +10,13 @@ import java.util.Optional;
 @Repository
 public interface ArticleRepository extends JpaRepository<Article, Long> {
 
-    // Пошук статті за її текстовим посиланням
     Optional<Article> findBySlug(String slug);
 
-    // Отримати всі опубліковані статті (для головної сторінки)
     List<Article> findByIsPublishedTrue();
 
-    // Отримати всі нерозглянуті статті (для сторінки модерації адміна)
     List<Article> findByIsPublishedFalse();
+    // пошук статей за автором
+    List<Article> findByAuthor(String author);
+    // пошук всіх правок для конкретної статті
+    List<Article> findByOriginalArticleSlugAndIsPublishedFalse(String originalArticleSlug);
 }
